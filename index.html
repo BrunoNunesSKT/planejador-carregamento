@@ -77,8 +77,9 @@ function pack(W,L,items,mode,g){
  }
  return out;
 }
-const score=o=>{let a=0,m=0,c=0;for(const b of o){c+=b.it.c;a+=b.it.w*b.it.h;m=Math.max(m,b.y+b.h)}return[c,Math.round(a*100)/100,-Math.round(m*100)/100]};
-const better=(a,b)=>{for(let i=0;i<3;i++)if(a[i]!=b[i])return a[i]>b[i];return false};
+// Prioridade: paletes maiores primeiro. O score é a lista de quantidades carregadas por tamanho (do maior para o menor), depois área e menor comprimento. Com um só tamanho, equivale a maximizar a quantidade.
+const score=(o,sz)=>{const cn=sz.map(()=>0);let a=0,m=0;for(const b of o){cn[sz.indexOf(b.it.w*b.it.h)]+=b.it.c;a+=b.it.w*b.it.h;m=Math.max(m,b.y+b.h)}return[...cn,Math.round(a*100)/100,-Math.round(m*100)/100]};
+const better=(a,b)=>{for(let i=0;i<a.length;i++)if(a[i]!=b[i])return a[i]>b[i];return false};
 // Simetria lateral: fração da carga (ponderada pelo nº de paletes por posição) que coincide com o espelho do carregamento em torno do eixo do baú. 1 = perfeitamente simétrico.
 function symm(o,W,g){
  const bs=o.map(b=>({a:b.x,z:b.x+b.w-g,y:b.y,e:b.y+b.h-g,c:b.it.c})).sort((p,q)=>p.y-q.y);
@@ -114,14 +115,14 @@ function pairUp(items,W,g,p){
 const expand=o=>{const r=[];for(const b of o){if(!b.it.pr){r.push(b);continue}const w1=b.w/2;r.push({...b,w:w1,it:b.it.pr[0]},{...b,x:b.x+w1,w:w1,it:b.it.pr[1]})}return r};
 function solve(W,L,items,g,q){
  const ords=[(a,b)=>b.w*b.h-a.w*a.h,(a,b)=>Math.max(b.w,b.h)-Math.max(a.w,a.h),(a,b)=>b.w-a.w,(a,b)=>b.h-a.h];
- const N=q||Math.max(40,Math.min(500,24000/items.length|0)),sym=true;let best=null,bs=null,bsym=null;
- // Prioridade: 1) nº de paletes, 2) área, 3) menor comprimento usado, 4) (se possível) simetria.
+ const N=q||Math.max(40,Math.min(500,24000/items.length|0)),sym=true,sz=[...new Set(items.map(i=>i.w*i.h))].sort((a,b)=>b-a);let best=null,bs=null,bsym=null;
+ // Prioridade: 1) paletes maiores, 2) área, 3) menor comprimento usado, 4) (se possível) simetria.
  for(let v=0;v<(sym?2:1);v++)for(let i=0;i<N;i++){
   const a=(v?pairUp(items,W,g,i%3?.6:1):items).slice().sort(ords[i%4]),n=a.length;
   if(i>=4)for(let k=0;k<1+i%7;k++){const x=Math.random()*n|0,y=Math.random()*n|0;[a[x],a[y]]=[a[y],a[x]]}
   if(i>=N-N/8)a.sort(()=>Math.random()-.5);
   for(let m=0;m<3;m++){
-   const o=expand(pack(W,L,a,m,g)),s=score(o);
+   const o=expand(pack(W,L,a,m,g)),s=score(o,sz);
    if(!bs||better(s,bs)){bs=s;best=o;bsym=null}
    else if(sym&&!better(bs,s)){if(bsym==null)bsym=symOf(best,W,g);const y=symOf(o,W,g);if(y>bsym+.002){best=o;bsym=y}}
   }
