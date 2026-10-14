@@ -155,7 +155,7 @@ async function exportar(){
   x.fillStyle=ink;x.font=`600 130px ${F}`;x.fillText(o.length,100,380);const bw=x.measureText(o.length).width;
   x.fillStyle=mut;x.font=`60px ${F}`;x.fillText(`de ${n} paletes`,100+bw+30,380);
   x.font=`600 52px ${F}`;x.fillStyle=miss?'#b42318':'#17703a';x.fillText(miss?`Não couberam ${miss} palete${miss>1?'s':''}.`:'Todos os paletes cabem.',100,455);
-  x.fillStyle=ink;x.font=`42px ${F}`;x.fillText(`Baú ${L} × ${W} cm. Distribuição: ${S.pos=='k'?'Lateralizada':'Centralizada'}.`,100,520);
+  x.fillStyle=ink;x.font=`42px ${F}`;x.fillText(`Baú ${L} × ${W} cm. Distribuição: ${S.pos=='k'?'lateralizada':'centralizada'}.`,100,520);
   [[Math.round(area/(W*L)*100)+'%','do piso'],[Math.round(used),'cm usados'],[Math.max(0,Math.round(L-used)),'cm livres na porta']].forEach((a,i)=>{const mx=1250+i*550;x.fillStyle=ink;x.font=`600 80px ${F}`;x.fillText(a[0],mx,375);x.fillStyle=mut;x.font=`40px ${F}`;x.fillText(a[1],mx,435)});
   x.font=`44px ${F}`;let lx=100,ly=610;const LG=[];
   ty.forEach(t=>{const s=`${A(+t)}  ${S.p[t].l}×${S.p[t].w} cm: ${cnt[t]||0} de ${tot[t]}`,w=50+x.measureText(s).width;if(lx+w>2870&&lx>100){lx=100;ly+=62}LG.push([t,s,lx,ly]);lx+=w+60});
