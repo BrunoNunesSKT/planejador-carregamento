@@ -58,7 +58,7 @@ function pack(W,L,items,mode,g){
  for(const it of items){
   let b=null;
   for(const f of F)for(const r of[0,1]){
-   if(r&&it.w===it.h)continue;
+   if(r&&(it.w===it.h||it.nr))continue;
    const w=(r?it.h:it.w)+g,h=(r?it.w:it.h)+g;
    if(w>f[2]||h>f[3])continue;
    const dw=f[2]-w,dh=f[3]-h,s=mode==0?[f[1]+h,f[0]]:mode==1?[Math.min(dw,dh),Math.max(dw,dh)]:[f[2]*f[3]-w*h,Math.min(dw,dh)];
@@ -77,21 +77,58 @@ function pack(W,L,items,mode,g){
  }
  return out;
 }
-const score=o=>{let a=0,m=0,c=0;for(const b of o){c+=b.it.c;a+=b.it.w*b.it.h;m=Math.max(m,b.y+b.h)}return[c,a,-m]};
+const score=o=>{let a=0,m=0,c=0;for(const b of o){c+=b.it.c;a+=b.it.w*b.it.h;m=Math.max(m,b.y+b.h)}return[c,Math.round(a*100)/100,-Math.round(m*100)/100]};
 const better=(a,b)=>{for(let i=0;i<3;i++)if(a[i]!=b[i])return a[i]>b[i];return false};
+// Simetria lateral: fração da carga (ponderada pelo nº de paletes por posição) que coincide com o espelho do carregamento em torno do eixo do baú. 1 = perfeitamente simétrico.
+function symm(o,W,g){
+ const bs=o.map(b=>({a:b.x,z:b.x+b.w-g,y:b.y,e:b.y+b.h-g,c:b.it.c})).sort((p,q)=>p.y-q.y);
+ const ys=[...new Set(bs.flatMap(b=>[b.y,b.e]))].sort((p,q)=>p-q);
+ let act=[],i=0,num=0,den=0;
+ for(let k=0;k<ys.length-1;k++){
+  const y0=ys[k],dy=ys[k+1]-y0;
+  while(i<bs.length&&bs[i].y<=y0)act.push(bs[i++]);
+  act=act.filter(b=>b.e>y0);
+  for(const p of act){den+=(p.z-p.a)*dy*p.c;for(const q of act){const lo=Math.max(p.a,W-q.z),hi=Math.min(p.z,W-q.a);if(hi>lo)num+=(hi-lo)*dy*Math.min(p.c,q.c)}}
+ }
+ return den?num/den:1;
+}
+const symOf=(o,W,g)=>{const k=o.map(b=>({...b}));align(k,W,g);return symm(k,W,g)};
+// Agrupa paletes iguais em pares lado a lado (um "super-item" com 2 paletes), que por construção são simétricos.
+function pairUp(items,W,g,p){
+ const by={},out=[];
+ items.forEach(it=>{const k=it.w+'_'+it.h+'_'+it.c;(by[k]=by[k]||[]).push(it)});
+ for(const k in by){
+  const l=by[k];let i=0;
+  for(;i+1<l.length;i+=2){
+   const a=l[i],o=[];
+   if(2*a.w+g<=W)o.push(0);
+   if(a.w!==a.h&&2*a.h+g<=W)o.push(1);
+   if(!o.length||Math.random()>=p){out.push(a,l[i+1]);continue}
+   const r=o[Math.random()*o.length|0];
+   out.push({w:r?2*a.h+g:2*a.w+g,h:r?a.w:a.h,t:a.t,c:a.c,nr:1,pr:[a,l[i+1]]});
+  }
+  if(i<l.length)out.push(l[i]);
+ }
+ return out;
+}
+const expand=o=>{const r=[];for(const b of o){if(!b.it.pr){r.push(b);continue}const w1=b.w/2;r.push({...b,w:w1,it:b.it.pr[0]},{...b,x:b.x+w1,w:w1,it:b.it.pr[1]})}return r};
 function solve(W,L,items,g,q){
  const ords=[(a,b)=>b.w*b.h-a.w*a.h,(a,b)=>Math.max(b.w,b.h)-Math.max(a.w,a.h),(a,b)=>b.w-a.w,(a,b)=>b.h-a.h];
- const N=q||Math.max(40,Math.min(500,24000/items.length|0));let best=null,bs=null;
- for(let i=0;i<N;i++){
-  const a=items.slice().sort(ords[i%4]),n=a.length;
+ const N=q||Math.max(40,Math.min(500,24000/items.length|0)),sym=true;let best=null,bs=null,bsym=null;
+ // Prioridade: 1) nº de paletes, 2) área, 3) menor comprimento usado, 4) (se possível) simetria.
+ for(let v=0;v<(sym?2:1);v++)for(let i=0;i<N;i++){
+  const a=(v?pairUp(items,W,g,i%3?.6:1):items).slice().sort(ords[i%4]),n=a.length;
   if(i>=4)for(let k=0;k<1+i%7;k++){const x=Math.random()*n|0,y=Math.random()*n|0;[a[x],a[y]]=[a[y],a[x]]}
   if(i>=N-N/8)a.sort(()=>Math.random()-.5);
-  for(let m=0;m<3;m++){const o=pack(W,L,a,m,g),s=score(o);if(!bs||better(s,bs)){bs=s;best=o}}
+  for(let m=0;m<3;m++){
+   const o=expand(pack(W,L,a,m,g)),s=score(o);
+   if(!bs||better(s,bs)){bs=s;best=o;bsym=null}
+   else if(sym&&!better(bs,s)){if(bsym==null)bsym=symOf(best,W,g);const y=symOf(o,W,g);if(y>bsym+.002){best=o;bsym=y}}
+  }
  }
  return best;
 }
-function align(o,W,g){
- const m=S.pos=='k'?'k':'c';
+function align(o,W,g,m=S.pos=='k'?'k':'c'){
  o.sort((a,b)=>a.y-b.y);const G=[];
  for(const b of o){const c=G[G.length-1];if(c&&b.y<c.e){c.l.push(b);c.e=Math.max(c.e,b.y+b.h)}else G.push({l:[b],e:b.y+b.h})}
  for(const c of G){
@@ -113,11 +150,11 @@ function calc(){
  let RR=run(sn);while(!RR.ok&&sn<mx){sn++;RR=run(sn)}
  const o=align(RR.r,W,g).sort((a,b)=>a.y-b.y||a.x-b.x);
  const cnt={},tot={},pl={};T.forEach(p=>tot[p.t]=p.n);o.forEach(b=>{cnt[b.it.t]=(cnt[b.it.t]||0)+b.it.c;if(b.it.c>1)pl[b.it.t]=(pl[b.it.t]||0)+1});const placed=o.reduce((s,b)=>s+b.it.c,0),stk=o.filter(b=>b.it.c>1).length;
- const area=o.reduce((s,b)=>s+b.it.w*b.it.h,0),used=Math.max(0,...o.map(b=>b.y+b.h-g)),miss=N-placed;
+ const sy=Math.round(symm(o,W,g)*100),area=o.reduce((s,b)=>s+b.it.w*b.it.h,0),used=Math.max(0,...o.map(b=>b.y+b.h-g)),miss=N-placed;
  LAST={o,g,W,L,used,n:N,miss,area,cnt,tot,pl,stk,placed};const lg=Object.keys(tot).map(t=>`<div class="lg"><i style="background:hsl(${H[t%8]} 75% 50%)"></i><span><b>${A(+t)}</b> ${S.p[t].l}×${S.p[t].w} cm: ${cnt[t]||0} de ${tot[t]}${pl[t]?` (${pl[t]} pilha${pl[t]>1?'s':''} de 2)`:''}</span></div>`).join('');
  $('#out').innerHTML=`<div class="c"><div class="big">${placed} <small>de ${N} paletes</small></div>
  <div class="${miss?'bad':'ok'}">${miss?`Não couberam ${miss} palete${miss>1?'s':''}.`:'Todos os paletes cabem.'}</div>${S.p.some(p=>p.r)?`<div class="n">${stk?`Remontagem usada em ${stk} pilha${stk>1?'s':''} (2 paletes cada).`:'Remontagem não foi necessária.'}</div>`:''}
- <div class="m"><div><b>${Math.round(area/(W*L)*100)}%</b><span>do piso</span></div><div><b>${Math.round(used)}</b><span>cm usados</span></div><div><b>${Math.max(0,Math.round(L-used))}</b><span>cm livres na porta</span></div></div>${lg}</div>
+ ${sy!=null?`<div class="n">Simetria lateral do carregamento: <b class="${sy>=90?'ok':''}">${sy}%</b></div>`:''}<div class="m"><div><b>${Math.round(area/(W*L)*100)}%</b><span>do piso</span></div><div><b>${Math.round(used)}</b><span>cm usados</span></div><div><b>${Math.max(0,Math.round(L-used))}</b><span>cm livres na porta</span></div></div>${lg}</div>
  <div class="bp">${draw(o,g,W,L,used)}</div>
  <button id="exp" onclick="exportar()" style="width:100%;font-size:18px;margin-bottom:12px">Exportar PDF (A4)</button><p class="n">Números indicam a ordem de carga: 1 é o primeiro, encostado no fundo (cabine), e o último fica junto à porta. Pilhas de 2 paletes aparecem com ×2 e moldura interna.</p>`;
  $('#out').scrollIntoView({behavior:'smooth'});
