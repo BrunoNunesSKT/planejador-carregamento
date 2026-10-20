@@ -152,11 +152,24 @@ function hostLights(hosts,lights,g){
  }
  return{H,rest};
 }
+// Maior retângulo livre na superfície de um material que recebe outros por cima (onde ele escreve o próprio número).
+function freeRect(e,g){
+ const hw=Math.floor(e.h.w-g),hh=Math.floor(e.h.h-g),G=[];
+ for(let y=0;y<hh;y++)G.push(new Uint8Array(hw));
+ e.lay.forEach(l=>{for(let y=Math.floor(l.y);y<Math.min(hh,Math.ceil(l.y+l.h));y++)for(let x=Math.floor(l.x);x<Math.min(hw,Math.ceil(l.x+l.w));x++)G[y][x]=1});
+ const all=[],ht=new Array(hw).fill(0);
+ for(let y=0;y<hh;y++){for(let x=0;x<hw;x++)ht[x]=G[y][x]?0:ht[x]+1;
+  for(let a=0;a<hw;a++){let mn=1e9,bt=null;for(let b=a;b<hw;b++){mn=Math.min(mn,ht[b]);if(!mn)break;const ar=(b-a+1)*mn;if(!bt||ar>bt.ar)bt={ar,x:a,y:y-mn+1,w:b-a+1,h:mn}}if(bt&&bt.w>=8&&bt.h>=8)all.push(bt)}}
+ all.sort((p,q)=>q.ar-p.ar);const out=[];
+ for(const r of all){if(out.length>=6)break;if(!out.some(o=>r.x>=o.x&&r.y>=o.y&&r.x+r.w<=o.x+o.w&&r.y+r.h<=o.y+o.h))out.push(r)}
+ return out;
+}
+
 function calc(){
  const e=$('#err');e.textContent='';sv();
  const g=Math.max(0,S.g||0),W=S.W,L=S.L,T=[];
  if(!(W>0&&L>0)){e.textContent='Informe o comprimento e a largura do baú.';return}
- S.p.forEach((p,t)=>{const n=Math.min(p.n|0,500);if(p.l>0&&p.w>0&&n>0)T.push({t,n,w:p.w,h:p.l,r:!!p.r,a:p.kg>0&&p.kg*n<LIM})});
+ S.p.forEach((p,t)=>{const n=Math.min(p.n|0,500);if(p.l>0&&p.w>0&&n>0)T.push({t,n,w:p.w,h:p.l,r:!!p.r,a:!!p.r&&p.kg>0&&p.kg*n<LIM})});
  if(!T.length){e.textContent='Adicione um tipo de material com medidas e quantidade.';return}
  const N=T.reduce((s,p)=>s+p.n,0),mx=T.reduce((s,p)=>s+(p.r&&!p.a?p.n>>1:0),0),au={};T.forEach(p=>{if(p.a)au[p.t]=1});
  const Th=T.filter(p=>!p.a),Tl=T.filter(p=>p.a),
@@ -173,15 +186,15 @@ function calc(){
  let sn=0;if(mx&&!run(0,60).ok){let a=1,b=mx;while(a<b){const m=(a+b)>>1;if(run(m,60).ok)b=m;else a=m+1}sn=a}
  let RR=run(sn);while(!RR.ok&&sn<mx){sn++;RR=run(sn)}
  const o=align(RR.r,W,g).sort((a,b)=>a.y-b.y||a.x-b.x),hosted=[],hs={};
- RR.H.forEach(e=>{const hn=o.indexOf(e.h)+1;if(e.lay.length)e.h.hh=1;e.lay.forEach((l,j)=>{hosted.push({x:e.h.x+l.x,y:e.h.y+l.y,w:l.w+g,h:l.h+g,it:l.it,on:1,lbl:hn+'abcdefghijklmnopqrstuvwxyz'[j%26]});hs[l.it.t]=(hs[l.it.t]||0)+1})});
- const all=o.concat(hosted),cnt={},tot={},pl={};T.forEach(p=>tot[p.t]=p.n);all.forEach(b=>{cnt[b.it.t]=(cnt[b.it.t]||0)+b.it.c;if(b.it.c>1)pl[b.it.t]=(pl[b.it.t]||0)+1});const placed=all.reduce((s,b)=>s+b.it.c,0),stk=o.filter(b=>b.it.c>1).length,stkA=o.filter(b=>b.it.c>1&&au[b.it.t]).length;
+ RR.H.forEach(e=>{if(e.lay.length){e.h.hh=1;e.h.frs=freeRect(e,g)}e.lay.forEach(l=>{hosted.push({x:e.h.x+l.x,y:e.h.y+l.y,w:l.w+g,h:l.h+g,it:l.it,on:1,host:e.h});hs[l.it.t]=(hs[l.it.t]||0)+1})});
+ const all=[];o.forEach(b=>{all.push(b);hosted.forEach(h=>{if(h.host===b)all.push(h)})});const cnt={},tot={},pl={};T.forEach(p=>tot[p.t]=p.n);all.forEach(b=>{cnt[b.it.t]=(cnt[b.it.t]||0)+b.it.c;if(b.it.c>1)pl[b.it.t]=(pl[b.it.t]||0)+1});const placed=all.reduce((s,b)=>s+b.it.c,0),stk=o.filter(b=>b.it.c>1).length,stkA=o.filter(b=>b.it.c>1&&au[b.it.t]).length;
  const hn=hosted.length,remTxt=[hn?`${hn} ${hn>1?'materiais':'material'} sobre materiais maiores`:'',stk?`${stk} pilha${stk>1?'s':''} de 2 no piso`:''].filter(Boolean).join(' e '),sy=Math.round(symm(o,W,g)*100),area=o.reduce((s,b)=>s+b.it.w*b.it.h,0),used=Math.max(0,...o.map(b=>b.y+b.h-g)),miss=N-placed;
  LAST={o:all,g,W,L,used,n:N,miss,area,cnt,tot,pl,stk,placed,remTxt};const lg=Object.keys(tot).map(t=>`<div class="lg"><i style="background:hsl(${H[t%8]} 75% 50%)"></i><span><b>${A(+t)}</b> ${S.p[t].l}×${S.p[t].w} cm: ${cnt[t]||0} de ${tot[t]}${pl[t]?` (${pl[t]} pilha${pl[t]>1?'s':''} de 2)`:''}${hs[t]?` · ${hs[t]} sobre materiais maiores`:''}${au[t]?` · ${+(S.p[t].kg*tot[t]).toFixed(1)} kg no total`:''}</span></div>`).join('');
  $('#out').innerHTML=`<div class="c"><div class="big">${placed} <small>de ${N} materiais</small></div>
  <div class="${miss?'bad':'ok'}">${miss?`Não couberam ${miss} ${miss>1?'materiais':'material'}.`:'Todos os materiais cabem.'}</div>${T.some(p=>p.r||p.a)?`<div class="n">${remTxt?`Remontagem usada: ${remTxt}.`:'Remontagem não foi necessária.'}</div>`:''}${Object.keys(au).length?`<div class="n">Peso total &lt; ${LIM} kg (${Object.keys(au).map(t=>A(+t)).join(', ')}): vão sobre materiais maiores quando possível; o restante fica no piso, remontado em pilhas de 2.</div>`:''}
  ${sy!=null?`<div class="n">Simetria lateral do carregamento: <b class="${sy>=90?'ok':''}">${sy}%</b></div>`:''}<div class="m"><div><b>${Math.round(area/(W*L)*100)}%</b><span>do piso</span></div><div><b>${Math.round(used)}</b><span>cm usados</span></div><div><b>${Math.max(0,Math.round(L-used))}</b><span>cm livres na porta</span></div></div>${lg}</div>
  <div class="bp">${draw(all,g,W,L,used)}</div>
- <button id="exp" onclick="exportar()" style="width:100%;font-size:18px;margin-bottom:12px">Exportar PDF (A4)</button><p class="n">Números indicam a ordem de carga: 1 é o primeiro, encostado no fundo (cabine), e o último fica junto à porta. Pilhas de 2 materiais aparecem com ×2 e moldura interna. Materiais leves sobre outro maior aparecem dentro dele, com o número do material de baixo mais uma letra (ex.: 3a, 3b).</p>`;
+ <button id="exp" onclick="exportar()" style="width:100%;font-size:18px;margin-bottom:12px">Exportar PDF (A4)</button><p class="n">Números indicam a ordem de carga: 1 é o primeiro, encostado no fundo (cabine), e o último fica junto à porta. Pilhas de 2 materiais aparecem com ×2 e moldura interna. Materiais leves sobre outro maior aparecem dentro dele e são carregados junto com ele (a numeração segue essa ordem).</p>`;
  $('#out').scrollIntoView({behavior:'smooth'});
 }
 let LAST=null;
@@ -223,7 +236,7 @@ async function exportar(){
   x.fillStyle=ink;x.font=`600 130px ${F}`;x.fillText(placed,100,380);const bw=x.measureText(placed).width;
   x.fillStyle=mut;x.font=`60px ${F}`;x.fillText(`de ${n} materiais`,100+bw+30,380);
   x.font=`600 52px ${F}`;x.fillStyle=miss?'#b42318':'#17703a';x.fillText(miss?`Não couberam ${miss} ${miss>1?'materiais':'material'}.`:'Todos os materiais cabem.',100,455);
-  x.fillStyle=ink;x.font=`42px ${F}`;x.fillText(`Baú ${L} × ${W} cm. Distribuição: ${S.pos=='k'?'lateralizada':'centralizada'}.${S.p.some(p=>p.r||p.kg>0&&p.kg*p.n<LIM)?` Remontagem: ${remTxt||'não necessária'}.`:''}`,100,520);
+  x.fillStyle=ink;x.font=`42px ${F}`;x.fillText(`Baú ${L} × ${W} cm. Distribuição: ${S.pos=='k'?'lateralizada':'centralizada'}.${S.p.some(p=>p.r)?` Remontagem: ${remTxt||'não necessária'}.`:''}`,100,520);
   [[Math.round(area/(W*L)*100)+'%','do piso'],[Math.round(used),'cm usados'],[Math.max(0,Math.round(L-used)),'cm livres na porta']].forEach((a,i)=>{const mx=1250+i*550;x.fillStyle=ink;x.font=`600 80px ${F}`;x.fillText(a[0],mx,375);x.fillStyle=mut;x.font=`40px ${F}`;x.fillText(a[1],mx,435)});
   x.font=`44px ${F}`;let lx=100,ly=610;const LG=[];
   ty.forEach(t=>{const s=`${A(+t)}  ${S.p[t].l}×${S.p[t].w} cm: ${cnt[t]||0} de ${tot[t]}${pl[t]?` (${pl[t]} pilha${pl[t]>1?'s':''} de 2)`:''}`,w=50+x.measureText(s).width;if(lx+w>2870&&lx>100){lx=100;ly+=62}LG.push([t,s,lx,ly]);lx+=w+60});
@@ -239,18 +252,18 @@ async function exportar(){
  }catch(e){b.textContent='Não foi possível exportar';setTimeout(()=>b.textContent=t0,2500)}
  b.disabled=false;
 }
-const bx=(b,i,x,y,w,h,fs,T)=>{const t=b.it.t,k=b.it.c>1,e=fs*.28,cx=x+w/2,cy=y+h/2,d=S.p[t].l+'×'+S.p[t].w,n=d.length*.55,z=Math.min(fs*.65,(w-fs*.3)/n),hz=z>=fs*.4&&h>fs*2.9,q=fs*.6,vt=!hz&&h*.45>=n*q&&h>fs*3.2;
- const R=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="hsl(${H[t%8]} 75% 58%)" fill-opacity="${b.on?.8:k?.55:.38}" stroke="#eaf6ff" stroke-width="${fs*.09}"/>`+(k?`<rect x="${x+e}" y="${y+e}" width="${w-2*e}" height="${h-2*e}" fill="none" stroke="#eaf6ff" stroke-width="${fs*.06}" stroke-dasharray="${fs*.3} ${fs*.2}"/>`:''),lab=A(t)+(k?' ×2':''),num=b.lbl||i+1;
- if(b.hh)return R;
- if(hz||vt)return R+T(cx,cy+(hz?-fs*.45:fs*.1),num,fs*1.1,'font-weight="600"')+T(cx,cy+(hz?fs*.5:fs*1.1),lab,fs*.65,'opacity=".85"')
- +(hz?T(cx,cy+fs*1.25,d,z,'opacity=".85"'):vt?T(cx,y+h*.8+q*.35,d,q,`opacity=".85" transform="rotate(-90 ${cx} ${y+h*.8})"`):'');
- // Caixa pequena: escolhe o layout de texto que cabe melhor (3 linhas, 2 linhas ou 1 linha) e reduz a fonte até caber; se ficar ilegível, mostra só o número.
- const cand=[[[num,1.1],[lab,.65],[d,.65]],[[num,1.1],[lab+'  '+d,.65]],[[num+' · '+lab+'  '+d,.8]],[[num,1.1]]];let bst=null;
- cand.forEach((c,ci)=>{const ls=c.map(([a,f])=>[a,f*fs]),wN=Math.max(...ls.map(([a,z])=>String(a).length*.55*z)),hN=ls.reduce((a,[,z])=>a+z*1.2,0),kk=Math.min(1,(w-fs*.2)/wN,(h-fs*.2)/hN),ef=kk*Math.min(...ls.map(l=>l[1])),ok=ci==cand.length-1||ef>=fs*.3;
-  if(ok&&(!bst||(ci<cand.length-1&&(bst.last||ef>bst.ef))))bst={ls,kk,ef,last:ci==cand.length-1}});
- let o=R,top=cy-bst.ls.reduce((a,[,z])=>a+z*bst.kk*1.2,0)/2;
- bst.ls.forEach(([a,z],li)=>{const zz=Math.max(z*bst.kk,fs*.15);o+=T(cx,top+zz*.95,a,zz,li==0&&bst.ls.length>1?'font-weight="600"':'opacity=".85"');top+=zz*1.2});
- return o};
+const bx=(b,i,x,y,w,h,fs,T0,tr)=>{const T=(...a)=>{const r=T0(...a);return r.replace('<text',`<text stroke="#0a1a33" stroke-width="${a[3]*.16}" stroke-linejoin="round"`).replace(/fill="[^"]*"/,'fill="#0a1a33"')+r.replace(/fill="[^"]*"/,'fill="#fff"')},t=b.it.t,k=b.it.c>1,e=fs*.28,
+ R=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="hsl(${H[t%8]} 75% 50%)" stroke="#eaf6ff" stroke-width="${fs*.09}"/>`+(k?`<rect x="${x+e}" y="${y+e}" width="${w-2*e}" height="${h-2*e}" fill="none" stroke="#eaf6ff" stroke-width="${fs*.06}" stroke-dasharray="${fs*.3} ${fs*.2}"/>`:''),
+ // Texto dentro de um retângulo: número grande + letra embaixo (mesmo formato em todos os materiais). Reduz a fonte até caber; se ficar ilegível, mostra só o número.
+ fit=(w,h,num,parts)=>{const cand=[];if(parts.length)cand.push([[num,1.1],[parts.join(' '),.65]]);cand.push([[num,1.1]]);
+  const rs=cand.map((c,ci)=>{const ls=c.map(([a,f])=>[a,f*fs]),wN=Math.max(...ls.map(([a,z])=>String(a).length*.55*z)),hN=ls.reduce((a,[,z])=>a+z*1.1,0),kk=Math.min(1,(w-fs*.1)/wN,(h-fs*.1)/hN);return{ls,kk,ef:kk*Math.min(...ls.map(l=>l[1])),last:ci==cand.length-1}});
+  return rs.find(r=>!r.last&&r.kk>=.7&&r.ef>=fs*.3)||rs.filter(r=>!r.last&&r.ef>=fs*.22).sort((p,q)=>q.ef-p.ef)[0]||rs[rs.length-1]},
+ emit=(x,y,w,h,bst)=>{const cx=x+w/2,cy=y+h/2;let o='',top=cy-bst.ls.reduce((a,[,z])=>a+z*bst.kk*1.1,0)/2;
+  bst.ls.forEach(([a,z],li)=>{const zz=Math.max(z*bst.kk,fs*.15);o+=T(cx,top+zz*.95,a,zz,li==0&&bst.ls.length>1?'font-weight="600"':'opacity=".85"');top+=zz*1.1});return o},
+ nm=A(t)+(k?' ×2':'');
+ // Material que recebe outros por cima: escreve o próprio número e letra na área livre dele em que o texto fica melhor (conforme a orientação do desenho).
+ if(b.hh){const c=(b.frs||[]).map(f=>{const X=x+(tr?f.y:f.x),Y=y+(tr?f.x:f.y),Wd=tr?f.h:f.w,Ht=tr?f.w:f.h,bt=fit(Wd,Ht,i+1,[nm]);return{X,Y,Wd,Ht,bt,sc:bt.last?0:bt.ef}}).sort((p,q)=>q.sc-p.sc)[0];return c?R+emit(c.X,c.Y,c.Wd,c.Ht,c.bt):R}
+ return R+emit(x,y,w,h,fit(w,h,i+1,[nm]))};
 function drawH(o,g,W,L,used){
  const fs=W*.065,ox=fs*4,oy=fs*2.4,vw=ox+L+fs*1.5,vh=oy+W+fs*3.8,c='#cfe8ff',T=(x,y,t,z,x2='')=>`<text x="${x}" y="${y}" font-size="${z}" fill="${c}" text-anchor="middle" ${x2}>${t}</text>`;
  let s=`<svg viewBox="0 0 ${vw} ${vh}" width="100%" font-family="Barlow Semi Condensed,sans-serif"><defs><pattern id="gr" width="50" height="50" patternUnits="userSpaceOnUse" x="${ox}" y="${oy}"><path d="M50 0H0V50" fill="none" stroke="${c}" stroke-opacity=".13" stroke-width=".6"/></pattern></defs><rect x="${ox}" y="${oy}" width="${L}" height="${W}" fill="url(#gr)" stroke="${c}" stroke-width="${fs*.12}"/>`;
@@ -259,7 +272,7 @@ function drawH(o,g,W,L,used){
  s+=`<g stroke="${c}" stroke-width="${fs*.07}"><path d="M${ox} ${dy}H${ox+L}M${ox} ${dy-k}V${dy+k}M${ox+L} ${dy-k}V${dy+k}M${dx} ${oy}V${oy+W}M${dx-k} ${oy}H${dx+k}M${dx-k} ${oy+W}H${dx+k}"/></g>`;
  s+=T(ox+L/2,dy+fs*1.2,L+' cm',fs*.85)+T(0,0,W+' cm',fs*.85,`transform="translate(${dx-fs*.6} ${oy+W/2}) rotate(-90)"`);
  if(L-used>1)s+=`<rect x="${ox+used}" y="${oy}" width="${L-used}" height="${W}" fill="none" stroke="${c}" stroke-dasharray="${fs*.4} ${fs*.3}" stroke-width="${fs*.07}" opacity=".6"/>`+(L-used>fs*6?T(ox+used+(L-used)/2,oy+W/2+fs*.3,'livre '+Math.round(L-used)+' cm',fs*.8,'opacity=".7"'):'');
- o.forEach((b,i)=>{s+=bx(b,i,ox+b.y,oy+b.x,b.h-g,b.w-g,fs,T)});
+ o.forEach((b,i)=>{s+=bx(b,i,ox+b.y,oy+b.x,b.h-g,b.w-g,fs,T,1)});
  return s+'</svg>';
 }
 function draw(o,g,W,L,used){
